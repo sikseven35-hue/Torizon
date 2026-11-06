@@ -77,7 +77,15 @@ impl Launcher {
             .w(px(size))
             .h(px(size * if alternate { 373. / 498. } else { 374. / 498. }))
             .overflow_hidden()
-            .child(gpui::img(image).size_full())
+            .child(
+                gpui::img(image)
+                    .id(if alternate {
+                        "mascot-wink"
+                    } else {
+                        "mascot-wave"
+                    })
+                    .size_full(),
+            )
     }
 
     pub(super) fn setup_advance(&mut self) {
@@ -198,18 +206,52 @@ impl Launcher {
         let t = self.theme;
         let step = self.torizon_setup.step;
         if !self.torizon_setup.greeted {
-            return Some(div().id("torizon-welcome")
-                .size_full().bg(gpui::rgb(0x101a22)).flex().items_center().justify_center()
-                .child(div().w(px(860.)).flex().items_center().gap(px(40.))
-                    .child(div().flex_1().flex().flex_col().gap(px(24.))
-                        .child(text(theme::CAPTION).text_color(gpui::rgb(0x8de1ca)).child(tr("YOUR WORLD STARTS HERE")))
-                        .child(div().text_size(px(64.)).font_family(theme::DISPLAY_FONT).child(tr("Hey, welcome!")))
-                        .child(text(theme::HEADING).child(tr("This is Torizon.")))
-                        .child(text(theme::UI).text_color(gpui::rgb(0xa8bac6)).child(tr("A few quick choices, a waving cat, and your next world. Let's make it yours.")))
-                        .child(button("welcome-start", "Let's set things up", Kind::Primary, &t)
-                            .bg(gpui::rgb(0x72cdb2)).text_color(gpui::rgb(0x10231e))
-                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {this.setup_advance();cx.notify();}))))
-                    .child(self.torizon_mascot(380., false))));
+            return Some(
+                div()
+                    .id("torizon-welcome")
+                    .size_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        glass::plate(24.)
+                            .w(px(860.))
+                            .p(px(36.))
+                            .border_1()
+                            .border_color(t.rule)
+                            .flex()
+                            .items_center()
+                            .gap(px(24.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(20.))
+                                    .child(text(theme::TITLE).child(tr("Welcome to Torizon")))
+                                    .child(
+                                        text(theme::UI)
+                                            .text_color(t.ink_soft)
+                                            .child(tr("Choose your language and offline name.")),
+                                    )
+                                    .child(
+                                        button(
+                                            "welcome-start",
+                                            "Let's set things up",
+                                            Kind::Primary,
+                                            &t,
+                                        )
+                                        .on_click(
+                                            cx.listener(|this, _: &ClickEvent, _, cx| {
+                                                this.setup_advance();
+                                                cx.notify();
+                                            }),
+                                        ),
+                                    ),
+                            )
+                            .child(self.torizon_mascot(330., false)),
+                    ),
+            );
         }
         let mut body = div().flex().flex_col().gap(px(16.)).min_h(px(240.));
         match step {
@@ -319,7 +361,9 @@ impl Launcher {
         if self.settings.torizon_mascots.unwrap_or(true) {
             side = side.child(self.torizon_mascot(184., step % 2 == 1));
         }
-        let card = div()
+        let card = glass::plate(24.)
+            .border_1()
+            .border_color(t.rule)
             .w(px(860.))
             .p(px(28.))
             .flex()
@@ -353,7 +397,6 @@ impl Launcher {
                 .top_0()
                 .left_0()
                 .size_full()
-                .bg(gpui::rgb(0x101a22))
                 .flex()
                 .items_center()
                 .justify_center()

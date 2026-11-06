@@ -1815,14 +1815,13 @@ impl Launcher {
         });
     }
 
-    /// Whether `tag` can start now ([`starts_now`]): prepared, no preparation under way, no game
-    /// running or starting.
     /// Local preparation is available to offline profiles as well. The backend
     /// still resolves existing game files before preparing this native build.
     pub(crate) fn preparation_access(&self) -> Option<bool> {
         self.settings.dev_offline.then_some(true).or(self.owner)
     }
 
+    /// Whether `tag` can start now: prepared, no preparation, no game running.
     pub(crate) fn can_start(&self, tag: &str) -> bool {
         let running = self.client.is_some() || self.starting_client.is_some();
         starts_now(backend::is_prepared(tag), self.preparing, running)
@@ -5256,25 +5255,6 @@ impl Render for Launcher {
         if std::mem::take(&mut self.restyle) {
             self.theme = self.settings_theme(window);
         }
-        if !self.settings.torizon_setup_done {
-            self.opening = None;
-            self.scale = window.scale_factor();
-            self.servers.note_focus(window, cx);
-            if window.focused(cx).is_none() {
-                window.focus(&self.root_focus, cx);
-            }
-            let setup = self.torizon_setup_screen(cx);
-            return div()
-                .relative()
-                .flex()
-                .flex_col()
-                .size_full()
-                .font_family(theme::FONT)
-                .text_color(t.ink)
-                .bg(gpui::rgb(0x101a22))
-                .children(titlebar::render(&t, window))
-                .child(div().relative().flex_1().min_h_0().children(setup));
-        }
         glass_ui::set_on(self.theme.glass);
         glass_ui::set_light(!self.theme.dark);
         glass::set_light(!self.theme.dark);
@@ -5308,6 +5288,25 @@ impl Render for Launcher {
         self.window_width = f32::from(size.width);
         self.window_long_side = f32::from(size.width).max(f32::from(size.height));
         self.scale_factor = window.scale_factor();
+        if !self.settings.torizon_setup_done {
+            self.opening = None;
+            if window.focused(cx).is_none() {
+                window.focus(&self.root_focus, cx);
+            }
+            glass::begin_build(window);
+            let setup = self.torizon_setup_screen(cx);
+            return div()
+                .relative()
+                .flex()
+                .flex_col()
+                .size_full()
+                .font_family(theme::FONT)
+                .text_color(t.ink)
+                .bg(t.page)
+                .child(self.scene.clone())
+                .children(titlebar::render(&t, window))
+                .child(div().relative().flex_1().min_h_0().children(setup));
+        }
         let content = match self.page {
             Page::Play => self.play_page(cx),
             Page::Versions => self.versions_page(cx),
