@@ -5250,6 +5250,25 @@ impl Render for Launcher {
         if std::mem::take(&mut self.restyle) {
             self.theme = self.settings_theme(window);
         }
+        if !self.settings.torizon_setup_done {
+            self.opening = None;
+            self.scale = window.scale_factor();
+            self.servers.note_focus(window, cx);
+            if window.focused(cx).is_none() {
+                window.focus(&self.root_focus, cx);
+            }
+            let setup = self.torizon_setup_screen(cx);
+            return div()
+                .relative()
+                .flex()
+                .flex_col()
+                .size_full()
+                .font_family(theme::FONT)
+                .text_color(t.ink)
+                .bg(gpui::rgb(0x101a22))
+                .children(titlebar::render(&t, window))
+                .child(div().relative().flex_1().min_h_0().children(setup));
+        }
         glass_ui::set_on(self.theme.glass);
         glass_ui::set_light(!self.theme.dark);
         glass::set_light(!self.theme.dark);
@@ -5499,9 +5518,6 @@ impl Render for Launcher {
         }
         if self.asking_owner() {
             root = root.child(self.owner_screen(cx));
-        }
-        if let Some(setup) = self.torizon_setup_screen(cx) {
-            root = root.child(setup);
         }
         if let Some(opening) = &self.opening {
             // The wordmark arrives letter by letter, then gives way to the launcher; a click or

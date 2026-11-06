@@ -6,6 +6,7 @@ use std::sync::{Arc, LazyLock};
 #[derive(Default)]
 pub(super) struct Setup {
     initialized: bool,
+    greeted: bool,
     step: usize,
     profile: usize,
     error: Option<String>,
@@ -64,14 +65,16 @@ impl Launcher {
             .flex_none()
             .w(px(size))
             .h(px(size * 1.35))
-            .rounded(px(20.))
             .overflow_hidden()
-            .bg(gpui::white())
             .child(gpui::img(image).size_full())
     }
 
     pub(super) fn setup_advance(&mut self) {
         self.torizon_setup.error = None;
+        if !self.torizon_setup.greeted {
+            self.torizon_setup.greeted = true;
+            return;
+        }
         if self.torizon_setup.step == 0 {
             let name = self.servers.value(Field::SetupName).trim().to_string();
             if !account::valid_offline_name(&name) {
@@ -159,7 +162,7 @@ impl Launcher {
     }
 
     pub(super) fn torizon_setup_screen(&mut self, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
-        if self.settings.torizon_setup_done || self.opening.is_some() {
+        if self.settings.torizon_setup_done {
             return None;
         }
         if !self.torizon_setup.initialized {
@@ -183,6 +186,20 @@ impl Launcher {
         }
         let t = self.theme;
         let step = self.torizon_setup.step;
+        if !self.torizon_setup.greeted {
+            return Some(div().id("torizon-welcome")
+                .size_full().bg(gpui::rgb(0x101a22)).flex().items_center().justify_center()
+                .child(div().w(px(860.)).flex().items_center().gap(px(40.))
+                    .child(div().flex_1().flex().flex_col().gap(px(24.))
+                        .child(text(theme::CAPTION).text_color(gpui::rgb(0x8de1ca)).child(tr("YOUR WORLD STARTS HERE")))
+                        .child(div().text_size(px(64.)).font_family(theme::DISPLAY_FONT).child(tr("Hey, welcome!")))
+                        .child(text(theme::HEADING).child(tr("This is Torizon.")))
+                        .child(text(theme::UI).text_color(gpui::rgb(0xa8bac6)).child(tr("A few quick choices, a waving cat, and your next world. Let's make it yours.")))
+                        .child(button("welcome-start", "Let's set things up", Kind::Primary, &t)
+                            .bg(gpui::rgb(0x72cdb2)).text_color(gpui::rgb(0x10231e))
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {this.setup_advance();cx.notify();}))))
+                    .child(self.torizon_mascot(300., false))));
+        }
         let mut body = div().flex().flex_col().gap(px(16.)).min_h(px(240.));
         match step {
             0 => {
@@ -294,8 +311,6 @@ impl Launcher {
         let card = div()
             .w(px(860.))
             .p(px(28.))
-            .rounded(px(24.))
-            .bg(t.surface)
             .flex()
             .gap(px(30.))
             .child(side)
@@ -327,7 +342,7 @@ impl Launcher {
                 .top_0()
                 .left_0()
                 .size_full()
-                .bg(t.page.opacity(0.97))
+                .bg(gpui::rgb(0x101a22))
                 .flex()
                 .items_center()
                 .justify_center()
