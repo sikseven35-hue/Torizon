@@ -637,7 +637,7 @@ fn table(language: Language) -> &'static Table {
                     .collect()
             })
             .collect();
-        let english: Vec<String> = tables
+        let english: std::collections::BTreeSet<String> = tables
             .iter()
             .flat_map(|t| t.keys())
             .filter(|key| key.contains("Horizon"))

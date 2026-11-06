@@ -39,6 +39,7 @@ pub fn initialize() -> Result<(), String> {
     let marker = installed.join(".torizon-bundled");
     if bundled.join("research-lock.json").is_file() && !marker.is_file() {
         copy_tree(&bundled, &installed).map_err(|e| e.to_string())?;
+        fs::write(installed.join(".installed"), b"Torizon 0.1.0\n").map_err(|e| e.to_string())?;
         fs::write(&marker, b"Torizon 0.1.0\n").map_err(|e| e.to_string())?;
     }
     if installed.join("horizon-client.exe").is_file() {
