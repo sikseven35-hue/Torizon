@@ -3,7 +3,7 @@
 //! (`horizon_client::no_resources`) and quits when it is closed. No loader, no
 //! crash report: nothing went wrong in the game.
 use super::*;
-use horizon_client::no_resources::{Action, DOWNLOAD_URL, NoResources};
+use horizon_client::no_resources::{Action, NoResources, DOWNLOAD_URL};
 use winit::event::MouseButton;
 
 struct Missing {
@@ -94,7 +94,7 @@ impl ApplicationHandler for Missing {
             return;
         }
         let attributes = horizon_client::window::with_horizon_icon(
-            Window::default_attributes().with_title("Horizon"),
+            Window::default_attributes().with_title("Torizon"),
         )
         .with_inner_size(winit::dpi::LogicalSize::new(1040.0, 700.0));
         let made = event_loop
