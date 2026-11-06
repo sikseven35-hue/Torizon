@@ -20,6 +20,9 @@ Minecraft's JARs, textures, sounds and prepared resources are not distributed he
 Offline profiles work in single player and on servers permitting offline login.
 Servers enforcing authenticated sessions still require a valid account.
 
+Discord Rich Presence uses the Torizon application (`1568347003405078658`),
+with its own logo, world status and session timer. It can be disabled in game settings.
+
 The renderer and integrated server run on separate threads. Chunk generation, lighting,
 meshing, chunk encoding and distant terrain share a worker pool. The game already selects
 all CPU threads except one automatically; Graphics settings also expose the worker count.
