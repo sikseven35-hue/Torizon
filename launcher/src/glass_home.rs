@@ -68,7 +68,16 @@ impl Launcher {
             .min_w_0()
             .pt(px(64. - crate::glass::CONTENT_INSET))
             .child(self.edition_tabs(java.is_some(), cx))
-            .child(self.home_title(cx))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(self.home_title(cx))
+                    .when(self.settings.torizon_mascots.unwrap_or(true), |d| {
+                        d.child(self.torizon_mascot(90., false))
+                    }),
+            )
             .child(self.played_text(cx))
             .child(actions)
     }

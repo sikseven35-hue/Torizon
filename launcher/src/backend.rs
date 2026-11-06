@@ -666,15 +666,8 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     release_order(a).cmp(&release_order(b))
 }
 
-/// Every published release of the repository, both kinds, as GitHub's JSON (kept on disk with its
-/// ETag, and read through Kira's mirror past GitHub's rate limit: [`crate::github`]).
-fn release_list() -> Result<serde_json::Value, String> {
-    crate::github::json(&format!(
-        "https://api.github.com/repos/{REPO}/releases?per_page=100"
-    ))
-}
-
 /// The releases in `list` whose tag passes `keep`, newest first, with the asset named `asset`.
+#[cfg(test)]
 pub(crate) fn parse_releases(
     list: &serde_json::Value,
     asset: Option<&str>,
@@ -718,6 +711,7 @@ pub(crate) fn parse_releases(
     out
 }
 
+#[cfg(test)]
 fn is_launcher_tag(tag: &str) -> bool {
     launcher_version(tag).is_some()
 }
@@ -731,6 +725,7 @@ pub fn releases() -> Result<Vec<Release>, String> {
 
 /// The game's builds in `list`, newest first. A Nightly is listed under the version it installs as
 /// ([`crate::nightly::version_of`]); only the current one (`nightly`) is an update.
+#[cfg(test)]
 pub(crate) fn game_releases(list: &serde_json::Value) -> Vec<Release> {
     let settings = Settings::load();
     let assets = game_assets_for(
@@ -747,6 +742,7 @@ pub(crate) fn game_releases(list: &serde_json::Value) -> Vec<Release> {
 
 /// [`game_releases`] for one platform's asset, and the one it installs from a release that has
 /// none of its own ([`GAME_FALLBACK`]).
+#[cfg(test)]
 fn game_releases_with(
     list: &serde_json::Value,
     asset: Option<&str>,
@@ -779,10 +775,12 @@ fn game_releases_with(
 /// a day, so the newest launcher release can be older than all of those: then the newest
 /// `launcher@` and `launcher-v` tags are looked up one by one (a draft's tag is skipped: it has no
 /// public release).
+#[cfg(test)]
 fn launcher_releases_in(list: &serde_json::Value) -> Vec<Release> {
     launcher_releases_in_with(list, |url| crate::github::json(&url))
 }
 
+#[cfg(test)]
 fn launcher_releases_in_with(
     list: &serde_json::Value,
     json: impl Fn(String) -> Result<serde_json::Value, String>,
@@ -817,6 +815,7 @@ fn launcher_releases_in_with(
 }
 
 /// The launcher tags in GitHub's matching-refs answer, newest first.
+#[cfg(test)]
 fn newest_launcher_tags(refs: &serde_json::Value) -> Vec<String> {
     let mut tags: Vec<String> = refs
         .as_array()
@@ -3099,7 +3098,7 @@ pub fn client_as(tag: &str, who: Option<&account::Player>) -> Result<Command, St
         return Err(error);
     }
     let session = match who {
-        None => account::session_for_game(&game_home(), false).map_err(|e| e.to_string()),
+        None => account::session_for_game(&game_home(), true).map_err(|e| e.to_string()),
         Some(who) => account::session_for_game_as(&game_home(), who),
     }
     .map_err(|refused| format!("{refused} {}", crate::i18n::tr(SIGN_IN_HINT)))?;
@@ -3277,6 +3276,7 @@ pub fn releases_and_updates(
     Ok(Updates::default())
 }
 
+#[cfg(test)]
 fn releases_and_updates_with(
     load: impl FnOnce() -> Result<serde_json::Value, String>,
     installed: impl FnOnce() -> Vec<String>,
@@ -3303,6 +3303,7 @@ fn releases_and_updates_with(
 
 /// If the selected installed game has the wrong architecture, offer the same release again so
 /// the preference also applies when there is no newer game version.
+#[cfg(test)]
 fn architecture_update(releases: &[Release], installed: &[String]) -> Option<Release> {
     if !can_choose_game_architecture() {
         return None;
@@ -4423,6 +4424,10 @@ pub struct Settings {
     /// comes from the player's own install. Off by default, and absent from the file while off.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dev_offline: bool,
+    #[serde(default)]
+    pub torizon_setup_done: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub torizon_mascots: Option<bool>,
 }
 
 impl Settings {

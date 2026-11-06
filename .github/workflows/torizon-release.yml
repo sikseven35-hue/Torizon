@@ -6,11 +6,16 @@ on:
         description: Release tag
         default: v0.1.0
         required: true
+      reuse_game_from_run:
+        description: Optional successful game build run with identical engine sources
+        default: ''
+        required: false
   push:
     tags: ['v*']
 
 permissions:
   contents: write
+  actions: read
 
 env:
   CARGO_PROFILE_RELEASE_LTO: 'false'
@@ -26,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [launcher, game]
+        component: ${{ inputs.reuse_game_from_run != '' && fromJSON('["launcher"]') || fromJSON('["launcher","game"]') }}
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -75,6 +80,29 @@ jobs:
           pattern: torizon-*
           path: dist/Torizon
           merge-multiple: true
+      - name: Validate the reused engine source
+        if: inputs.reuse_game_from_run != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.reuse_game_from_run }}
+        run: |
+          if ($env:SOURCE_RUN -notmatch '^\d+$') { throw 'Invalid source run' }
+          $sourceSha = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" --jq .head_sha
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tree = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/$sourceSha" | ConvertFrom-Json
+          foreach ($path in @('crates', 'mods', 'Cargo.toml', 'Cargo.lock')) {
+            $old = ($tree.tree | Where-Object path -eq $path).sha
+            $current = git rev-parse "HEAD:$path"
+            if ($old -ne $current) { throw "Engine source changed: $path. Build a new game instead of reusing it." }
+          }
+      - uses: actions/download-artifact@v4
+        if: inputs.reuse_game_from_run != ''
+        with:
+          name: torizon-game
+          path: dist/Torizon
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.reuse_game_from_run }}
       - name: Package and publish
         shell: pwsh
         env:
@@ -82,6 +110,8 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Use a version tag such as v0.1.0' }
+          Set-Content dist/Torizon/runtime/.installed 'Torizon 0.1.0' -Encoding ascii
+          Copy-Item TORIZON.md dist/Torizon/TORIZON.md -Force
           Compress-Archive -Path dist/Torizon -DestinationPath dist/Torizon-Windows-x64.zip
           Copy-Item dist/Torizon/Torizon.exe dist/Torizon.exe
           $files = @('dist/Torizon-Windows-x64.zip', 'dist/Torizon.exe')

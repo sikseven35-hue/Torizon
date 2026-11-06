@@ -10,6 +10,9 @@ implemented in this fork; importing older worlds upgrades them to 26.3.
 On Windows, extract the complete release ZIP into a writable folder and run
 **Torizon.exe**. Keep `runtime/` beside it. User data stays in `data/` and `game/`.
 The separate EXE download is a launcher replacement; a first installation needs the ZIP.
+The first launch walks through language, offline name, Minecraft files, performance
+and optional animated cat mascots. The setup can be reopened in Settings. The cats
+become still images while a game runs.
 Choose the folder of your existing Minecraft 26.3 installation to prepare resources.
 Fabric/TLauncher folders are supported when their client JAR matches the pinned game.
 Minecraft's JARs, textures, sounds and prepared resources are not distributed here.

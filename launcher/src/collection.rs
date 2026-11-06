@@ -114,7 +114,9 @@ impl Launcher {
     /// Whether the question covers the window: not answered for this consent version, and the
     /// opening is over.
     pub(crate) fn asking_consent(&self) -> bool {
-        self.opening.is_none() && self.collection.consent.needs_asking()
+        horizon_telemetry::endpoint().is_some()
+            && self.opening.is_none()
+            && self.collection.consent.needs_asking()
     }
 
     fn answer_consent(&mut self, choices: Choices) {

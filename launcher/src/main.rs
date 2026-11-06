@@ -77,6 +77,7 @@ mod switch_page;
 mod theme;
 mod themes_page;
 mod titlebar;
+mod torizon_setup;
 mod wardrobe_page;
 mod while_playing;
 mod worlds_page;
@@ -221,6 +222,7 @@ enum Load<T> {
 const LOG_LINES: usize = 2000;
 
 struct Launcher {
+    torizon_setup: torizon_setup::Setup,
     theme: Theme,
     page: Page,
     /// How many times the page changed, for the page transition.
@@ -326,10 +328,8 @@ struct Launcher {
     shop: wardrobe_page::Shop,
     /// The cosmetics service's last word on the founder set's window (`GET /v1/shop`): whether
     /// the top bar has the Wardrobe page with cosmetics off (`wardrobe_shown`).
-    shop_status: Option<horizon_launcher::wardrobe::Claim>,
     /// The selected account's own answer on it from its last Wardrobe visit, kept on disk (a
     /// preview the service grants it, its claim).
-    shop_kept: Option<horizon_launcher::wardrobe::Claim>,
     /// Work the look out again on the next frame (a launcher theme put on or taken off).
     restyle: bool,
     /// Why the last picture for Home's background was refused.
@@ -621,8 +621,6 @@ impl Launcher {
             wardrobe_marks: Default::default(),
             wardrobe_reload: false,
             shop: Default::default(),
-            shop_status: None,
-            shop_kept: None,
             // The first draw takes the launcher theme from Settings.
             restyle: true,
             background_error: None,
@@ -732,6 +730,7 @@ impl Launcher {
             aside: while_playing::Aside::new(window.window_handle()),
             shortcuts: Default::default(),
             offline_name: offline_name(),
+            torizon_setup: torizon_setup::Setup::default(),
             side_servers: horizon_launcher::servers::list(),
             sky: sky::Sky::default(),
             scene: cx.new(|_| scene::Scene::new()),
@@ -2906,7 +2905,6 @@ impl Launcher {
             },
         ));
         let items = self.instance_items(heading, cx);
-        let mut rows = items.len();
         let list = div()
             .flex()
             .flex_col()
@@ -2922,8 +2920,6 @@ impl Launcher {
         if !servers.is_empty() {
             list = list.child(heading(tr("SERVERS").into()));
         }
-        rows += servers.len();
-        let headings = 1 + usize::from(!servers.is_empty());
         for e in servers {
             let up = self.servers.is_up(&e.dir);
             let open = self.page == Page::Servers && self.servers.open.as_ref() == Some(&e.dir);
@@ -5504,6 +5500,9 @@ impl Render for Launcher {
         if self.asking_owner() {
             root = root.child(self.owner_screen(cx));
         }
+        if let Some(setup) = self.torizon_setup_screen(cx) {
+            root = root.child(setup);
+        }
         if let Some(opening) = &self.opening {
             // The wordmark arrives letter by letter, then gives way to the launcher; a click or
             // a key skips ahead.
@@ -5515,7 +5514,7 @@ impl Render for Launcher {
                 .line_height(px(theme::WORDMARK.px * 0.5))
                 .font_weight(FontWeight::BOLD)
                 .text_color(t.ink)
-                .children("HORIZON".chars().enumerate().map(|(i, c)| {
+                .children("TORIZON".chars().enumerate().map(|(i, c)| {
                     let at = held - i as f32 * theme::STAGGER.as_secs_f32() * 1.5;
                     let p = ease_out_cubic(at / theme::ENTER.as_secs_f32());
                     div()

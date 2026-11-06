@@ -66,10 +66,12 @@ pub(super) enum Field {
     AccentHex,
     /// The Shop's gift recipient (`wardrobe_page/shop/basket.rs`).
     ShopGift,
+    SetupName,
+    SetupPath,
 }
 
 impl Field {
-    const ALL: [Field; 25] = [
+    const ALL: [Field; 27] = [
         Field::Name,
         Field::Seed,
         Field::Players,
@@ -95,6 +97,8 @@ impl Field {
         Field::DeleteServer,
         Field::AccentHex,
         Field::ShopGift,
+        Field::SetupName,
+        Field::SetupPath,
     ];
 }
 
@@ -1208,6 +1212,7 @@ impl Launcher {
             | Field::ConsoleSearch
             | Field::DeleteServer
             | Field::AccentHex => {}
+            Field::SetupName | Field::SetupPath => self.setup_advance(),
             Field::PreLaunch | Field::Wrapper | Field::LaunchEnv | Field::PostExit => {
                 self.save_launch()
             }

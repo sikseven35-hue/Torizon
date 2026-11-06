@@ -21,42 +21,7 @@ impl Launcher {
         }
     }
 
-    /// The section, when revealed or when one of its options is on.
-    pub(super) fn dev_options_section(&self, cx: &mut Context<Self>) -> Option<Div> {
-        if !self.dev_options && !self.settings.dev_offline {
-            return None;
-        }
-        let t = self.theme;
-        let toggle = switch("dev-offline", self.settings.dev_offline, &t).on_click(cx.listener(
-            |this, _: &ClickEvent, _, cx| {
-                this.settings.dev_offline = !this.settings.dev_offline;
-                this.save_settings();
-                cx.notify();
-            },
-        ));
-        Some(
-            div()
-                .flex()
-                .flex_col()
-                .child(
-                    section_title("Developer options", "terminal", &t)
-                        .mt(px(20.))
-                        .mb(px(12.)),
-                )
-                .child(index_row(
-                    0,
-                    tr("Offline names without an account"),
-                    Some(
-                        div()
-                            .child(tr(
-                                "Offline names play without a Microsoft account that owns the game. \
-                                 Minecraft still comes from your own install.",
-                            ))
-                            .into_any_element(),
-                    ),
-                    Some(toggle.into_any_element()),
-                    &t,
-                )),
-        )
+    pub(super) fn dev_options_section(&mut self, cx: &mut Context<Self>) -> Option<Div> {
+        Some(self.torizon_options(cx))
     }
 }

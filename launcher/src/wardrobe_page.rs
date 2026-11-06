@@ -319,45 +319,6 @@ impl Launcher {
         false
     }
 
-    /// Ask the cosmetics service whether there is something to show, at start and every half hour
-    /// (`GET /v1/shop`, no session, nothing about the player), and read the selected account's
-    /// own last answer from disk. Offline, the last answer stands.
-    pub(super) fn watch_shop(&self, cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| loop {
-            let Ok(uuid) = this.update(cx, |this, _| this.wardrobe_account().map(|a| a.uuid))
-            else {
-                return;
-            };
-            let (public, kept) = cx
-                .background_executor()
-                .spawn(async move {
-                    let kept = uuid
-                        .and_then(|u| Saved::load(&dir(), &u).me)
-                        .map(|m| m.claim);
-                    (Service::live().shop().ok(), kept)
-                })
-                .await;
-            let gone = this.update(cx, |this, cx| {
-                if public.is_some() {
-                    this.shop_status = public;
-                }
-                this.shop_kept = kept;
-                // Taken away while shown (the window unset again): back Home.
-                if matches!(this.page, Page::Wardrobe | Page::Shop) && !this.wardrobe_shown() {
-                    this.go(Page::Play);
-                }
-                cx.notify();
-            });
-            if gone.is_err() {
-                return;
-            }
-            cx.background_executor()
-                .timer(Duration::from_secs(30 * 60))
-                .await;
-        })
-        .detach();
-    }
-
     /// The account the page is for: the selected one, if it signed in with Microsoft.
     fn wardrobe_account(&self) -> Option<account::Account> {
         match self.accounts.player() {
