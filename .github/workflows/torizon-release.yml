@@ -1,0 +1,95 @@
+name: Build and release Torizon
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag
+        default: v0.1.0
+        required: true
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_PROFILE_RELEASE_LTO: 'false'
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+  CARGO_PROFILE_RELEASE_DEBUG: '0'
+  CARGO_INCREMENTAL: '0'
+  RUSTFLAGS: '-C target-feature=+crt-static'
+  HORIZON_VERSION: 'Torizon 0.1.0'
+  HORIZON_LAUNCHER_VERSION: '0.1.0'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [launcher, game]
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.component == 'launcher' && 'launcher -> target' || '. -> target' }}
+          shared-key: torizon-windows-${{ matrix.component }}
+      - name: Build launcher
+        if: matrix.component == 'launcher'
+        shell: pwsh
+        run: |
+          cargo build --locked --release --manifest-path launcher/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --manifest-path launcher/Cargo.toml --lib account::tests::the_developer_option
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Path dist/Torizon -Force | Out-Null
+          Copy-Item launcher/target/release/horizon-launcher.exe dist/Torizon/Torizon.exe
+      - name: Build Rust game and prepare tools
+        if: matrix.component == 'game'
+        shell: pwsh
+        run: |
+          cargo build --locked --release -p horizon-client -p horizon-client-lib --bin horizon-client --bin horizon-ctl -p horizon-prepare --bin horizon-prepare -p horizon-server --bin horizon-server
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/package_torizon.py --game-bin target/release --output dist/Torizon
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: torizon-${{ matrix.component }}
+          path: dist/Torizon/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: torizon-*
+          path: dist/Torizon
+          merge-multiple: true
+      - name: Package and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Use a version tag such as v0.1.0' }
+          Compress-Archive -Path dist/Torizon -DestinationPath dist/Torizon-Windows-x64.zip
+          Copy-Item dist/Torizon/Torizon.exe dist/Torizon.exe
+          $files = @('dist/Torizon-Windows-x64.zip', 'dist/Torizon.exe')
+          $files | ForEach-Object { $h = Get-FileHash $_ -Algorithm SHA256; '{0}  {1}' -f $h.Hash.ToLower(),(Split-Path $_ -Leaf) } | Set-Content dist/SHA256SUMS -Encoding ascii
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Torizon $env:RELEASE_TAG — Windows x64" --notes-file TORIZON.md
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload $env:RELEASE_TAG dist/Torizon-Windows-x64.zip dist/Torizon.exe dist/SHA256SUMS --repo $env:GITHUB_REPOSITORY --clobber
+          exit $LASTEXITCODE
