@@ -24,10 +24,17 @@ static WINK: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| {
         include_bytes!("../assets/torizon-cats/wink.gif").to_vec(),
     ))
 });
-static STILL: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| {
+static WAVE_STILL: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| {
     Arc::new(gpui::Image::from_bytes(
         gpui::ImageFormat::Png,
         include_bytes!("../assets/torizon-cats/wave.png").to_vec(),
+    ))
+});
+
+static WINK_STILL: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| {
+    Arc::new(gpui::Image::from_bytes(
+        gpui::ImageFormat::Png,
+        include_bytes!("../assets/torizon-cats/wink.png").to_vec(),
     ))
 });
 
@@ -55,7 +62,11 @@ fn option(path: &std::path::Path, key: &str, value: &str) -> std::io::Result<()>
 impl Launcher {
     pub(super) fn torizon_mascot(&self, size: f32, alternate: bool) -> Div {
         let image = if self.client.is_some() {
-            STILL.clone()
+            if alternate {
+                WINK_STILL.clone()
+            } else {
+                WAVE_STILL.clone()
+            }
         } else if alternate {
             WINK.clone()
         } else {
@@ -64,7 +75,7 @@ impl Launcher {
         div()
             .flex_none()
             .w(px(size))
-            .h(px(size * 1.35))
+            .h(px(size * if alternate { 373. / 498. } else { 374. / 498. }))
             .overflow_hidden()
             .child(gpui::img(image).size_full())
     }
@@ -198,7 +209,7 @@ impl Launcher {
                         .child(button("welcome-start", "Let's set things up", Kind::Primary, &t)
                             .bg(gpui::rgb(0x72cdb2)).text_color(gpui::rgb(0x10231e))
                             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {this.setup_advance();cx.notify();}))))
-                    .child(self.torizon_mascot(300., false))));
+                    .child(self.torizon_mascot(380., false))));
         }
         let mut body = div().flex().flex_col().gap(px(16.)).min_h(px(240.));
         match step {
