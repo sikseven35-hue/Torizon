@@ -1817,6 +1817,12 @@ impl Launcher {
 
     /// Whether `tag` can start now ([`starts_now`]): prepared, no preparation under way, no game
     /// running or starting.
+    /// Local preparation is available to offline profiles as well. The backend
+    /// still resolves existing game files before preparing this native build.
+    pub(crate) fn preparation_access(&self) -> Option<bool> {
+        self.settings.dev_offline.then_some(true).or(self.owner)
+    }
+
     pub(crate) fn can_start(&self, tag: &str) -> bool {
         let running = self.client.is_some() || self.starting_client.is_some();
         starts_now(backend::is_prepared(tag), self.preparing, running)
