@@ -165,7 +165,10 @@ impl Launcher {
         if !self.torizon_setup.initialized {
             let name = self.who_plays().0;
             self.servers.text(Field::SetupName).set(name);
-            let extra = dirs::data_dir().map(|dir| dir.join(".tlauncher/legacy/Minecraft/game"));
+            let extra = std::env::var_os("APPDATA")
+                .map(std::path::PathBuf::from)
+                .or_else(dirs::data_dir)
+                .map(|dir| dir.join(".tlauncher/legacy/Minecraft/game"));
             let path = self
                 .settings
                 .minecraft_dir

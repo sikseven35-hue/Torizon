@@ -88,6 +88,8 @@ jobs:
           SOURCE_RUN: ${{ inputs.reuse_game_from_run }}
         run: |
           if ($env:SOURCE_RUN -notmatch '^\d+$') { throw 'Invalid source run' }
+          gh run watch $env:SOURCE_RUN --repo $env:GITHUB_REPOSITORY --exit-status
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $sourceSha = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" --jq .head_sha
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $tree = gh api "repos/$env:GITHUB_REPOSITORY/git/trees/$sourceSha" | ConvertFrom-Json

@@ -956,7 +956,7 @@
   "Sign in with a Minecraft account first.": "Сначала войдите с аккаунтом Minecraft.",
   "Mojang's session server is not answering. Try again later.": "Сервер сессий Mojang не отвечает. Попробуйте позже.",
   "Head": "Голова",
-  "Back": "Спина",
+  "Back": "Назад",
   "Nothing": "Ничего",
   "Reset view": "Сбросить вид",
   "Drag to turn, scroll to zoom.": "Перетащите, чтобы повернуть, прокрутите, чтобы приблизить.",
@@ -1255,4 +1255,6 @@
   "Русский": "Русский",
   "English": "English",
   "Українська": "Українська"
+,
+  "Next": "Далее"
 }
