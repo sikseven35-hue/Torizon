@@ -1,7 +1,4 @@
-//! A server's chunk columns (`ClientboundLevelChunkWithLightPacket`): the
-//! sections and light of each packet become a client column on a decoder
-//! thread as soon as the packet arrives, so the frame that handles it in
-//! order only inserts the result (`ClientPacketListener.handleLevelChunkWithLight`).
+//! Server chunk columns decoded on the shared worker pool and applied in wire order.
 use super::Game;
 use horizon_client::{
     chunk::{
@@ -15,11 +12,9 @@ use horizon_protocol::{
     packets::play::{self, Clientbound as C},
     registry::DimensionType,
 };
+use horizon_threads::jobs::{self, Class, ordered::Ordered};
 use horizon_world::attachments::Holder;
-use std::sync::{
-    Arc,
-    mpsc::{self, TryRecvError},
-};
+use std::sync::{Arc, mpsc::TryRecvError};
 
 /// What turning a chunk packet into a client column depends on: the
 /// dimension's height and sky, and the server's biome registry mapped to
@@ -63,7 +58,7 @@ impl ChunkFormat {
     }
 
     /// LevelChunkSection data into the client's column.
-    fn column(&self, p: &play::LevelChunkWithLight) -> Result<Chunk, String> {
+    pub(super) fn column(&self, p: &play::LevelChunkWithLight) -> Result<Chunk, String> {
         let sections = p
             .chunk
             .sections(self.sections, 16, self.biome_bits)
@@ -148,7 +143,11 @@ impl ChunkFormat {
 
     /// `LevelChunk.replaceBiomes`: each of the dimension's sections reads
     /// its biome container from the packet's buffer, in order.
-    fn replace_biomes(&self, chunk: &mut Chunk, data: &play::ChunkBiomeData) -> Result<(), String> {
+    pub(super) fn replace_biomes(
+        &self,
+        chunk: &mut Chunk,
+        data: &play::ChunkBiomeData,
+    ) -> Result<(), String> {
         let biomes = data
             .biomes(self.sections, self.biome_bits)
             .map_err(|e| e.to_string())?;
@@ -186,53 +185,39 @@ impl ChunkFormat {
 
 type Decoded = (Box<C>, Result<Chunk, String>);
 
-/// One thread that decodes chunk packets in the order they arrived; its
-/// results come back in that order, one per `submit`.
+/// Chunk packets decode in parallel on the shared workers. Results are
+/// consumed in wire order, with a bounded window of expanded columns.
 pub(super) struct ChunkDecoder {
-    jobs: mpsc::Sender<(Arc<ChunkFormat>, Box<C>)>,
-    done: mpsc::Receiver<Decoded>,
+    jobs: Ordered<Decoded>,
 }
 
 impl ChunkDecoder {
     pub(super) fn new() -> Self {
-        let (jobs, todo) = mpsc::channel::<(Arc<ChunkFormat>, Box<C>)>();
-        let (finished, done) = mpsc::channel();
-        // The thread ends with the connection, when `jobs` is dropped.
-        let spawned = std::thread::Builder::new()
-            .name("Chunk decoder".into())
-            .spawn(move || {
-                // A frame waits for its columns, as it would for the render
-                // thread's own work.
-                horizon_threads::favour_current();
-                for (format, packet) in todo {
-                    let column = match &*packet {
-                        C::LevelChunkWithLight(p) => format.column(p),
-                        _ => Err("not a chunk packet".into()),
-                    };
-                    if finished.send((packet, column)).is_err() {
-                        break;
-                    }
-                }
-            });
-        if let Err(e) = spawned {
-            log::warn!("Horizon: no chunk decoder thread ({e}); chunks decode in the frame");
+        let pool = jobs::pool();
+        Self {
+            jobs: Ordered::new(pool, Class::Urgent, pool.threads() * 2),
         }
-        Self { jobs, done }
     }
 
     /// Start decoding a chunk packet with the format it arrived under.
-    /// Without a decoder thread the packet comes back undecoded.
     pub(super) fn submit(&self, format: Arc<ChunkFormat>, packet: Box<C>) -> Option<Box<C>> {
-        self.jobs.send((format, packet)).err().map(|e| (e.0).1)
+        self.jobs.submit(move || {
+            let column = match &*packet {
+                C::LevelChunkWithLight(p) => format.column(p),
+                _ => Err("not a chunk packet".into()),
+            };
+            (packet, column)
+        });
+        None
     }
 
     /// The oldest submitted packet and its column, unless it is still
     /// decoding: a frame never waits for the decoder.
     pub(super) fn next(&self) -> Next {
-        match self.done.try_recv() {
+        match self.jobs.try_next() {
             Ok(decoded) => Next::Ready(decoded),
             Err(TryRecvError::Empty) => Next::Decoding,
-            // The decoder thread panicked: its columns are gone.
+            // This job failed; later columns may still finish.
             Err(TryRecvError::Disconnected) => Next::Lost,
         }
     }
@@ -335,14 +320,16 @@ impl Game<'_> {
         }
         for data in &p.chunks {
             let [x, z] = data.pos;
+            let sections =
+                horizon_client::section_mask::SectionMask::below(self.world.layout().sections());
             for dz in -1..=1 {
                 for dx in -1..=1 {
                     if !self.world.chunks.contains_key(&(x + dx, z + dz)) {
                         continue;
                     }
-                    for sy in 0..self.world.layout().sections() as i32 {
-                        self.world.dirty_sections.insert((x + dx, sy, z + dz));
-                    }
+                    self.world
+                        .dirty_sections
+                        .insert_mask(x + dx, z + dz, sections);
                 }
             }
         }
@@ -368,7 +355,6 @@ impl Game<'_> {
         Streaming::light_updated(&mut self.world, p.x, p.z, &changed);
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

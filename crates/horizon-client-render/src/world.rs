@@ -21,6 +21,12 @@ impl DirtySections {
         debug_assert!((0..SectionMask::CAPACITY as i32).contains(&sy));
         self.columns.entry((x, z)).or_default().insert(sy as usize);
     }
+    /// Merge a column's dirty sections with one map lookup, retaining earlier edits.
+    pub fn insert_mask(&mut self, x: i32, z: i32, sections: SectionMask) {
+        if !sections.is_empty() {
+            *self.columns.entry((x, z)).or_default() |= sections;
+        }
+    }
     pub fn contains(&self, &(x, sy, z): &(i32, i32, i32)) -> bool {
         (0..SectionMask::CAPACITY as i32).contains(&sy)
             && self

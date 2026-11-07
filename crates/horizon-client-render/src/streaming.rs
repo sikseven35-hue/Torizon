@@ -1151,11 +1151,12 @@ impl Streaming {
         world.chunks.insert(key, Arc::new(chunk));
         self.lit.insert(key);
         self.generated_total += 1;
+        let sections = SectionMask::below(world.layout().sections());
         for dz in -1..=1 {
             for dx in -1..=1 {
-                for sy in 0..world.layout().sections() as i32 {
-                    world.dirty_sections.insert((key.0 + dx, sy, key.1 + dz));
-                }
+                world
+                    .dirty_sections
+                    .insert_mask(key.0 + dx, key.1 + dz, sections);
             }
         }
     }
@@ -1184,16 +1185,16 @@ impl Streaming {
     /// (`setSectionDirtyWithNeighbors`). A resent column's sections with new
     /// biomes remesh the same way.
     pub fn light_updated(world: &mut World, x: i32, z: i32, sections: &[usize]) {
+        let mut affected = SectionMask::EMPTY;
+        let count = world.layout().sections();
         for &sy in sections {
-            for dz in -1..=1 {
-                for dy in -1..=1 {
-                    for dx in -1..=1 {
-                        let s = sy as i32 + dy;
-                        if (0..world.layout().sections() as i32).contains(&s) {
-                            world.dirty_sections.insert((x + dx, s, z + dz));
-                        }
-                    }
-                }
+            for section in sy.saturating_sub(1)..=sy.saturating_add(1).min(count - 1) {
+                affected.insert(section);
+            }
+        }
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                world.dirty_sections.insert_mask(x + dx, z + dz, affected);
             }
         }
     }
@@ -3155,6 +3156,44 @@ static NO_CHUNKS: std::sync::LazyLock<HashSet<(i32, i32)>> = std::sync::LazyLock
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_dirty_masks_keep_all_light_neighbours_and_existing_edits() {
+        let mut world = World::new(horizon_world::registry::BlockStateId(0), 0);
+        world.dirty_sections.insert((40, 8, -30));
+        Streaming::light_updated(&mut world, 2, -3, &[0, 2, 3, 23, 3]);
+        // Bottom, overlapping middle sections, and the top; no wrap at either end.
+        let expected = [0, 1, 2, 3, 4, 22, 23];
+        assert_eq!(world.dirty_sections.len(), 9 * expected.len() + 1);
+        for x in 1..=3 {
+            for z in -4..=-2 {
+                assert_eq!(
+                    world
+                        .dirty_sections
+                        .take_column(x, z)
+                        .iter()
+                        .collect::<Vec<_>>(),
+                    expected
+                );
+            }
+        }
+        assert!(world.dirty_sections.contains(&(40, 8, -30)));
+        Streaming::light_updated(&mut world, 2, -3, &[]);
+        assert_eq!(world.dirty_sections.len(), 1);
+        // A following whole-column packet merges with earlier block edits.
+        world.dirty_sections.insert((2, 5, -3));
+        world
+            .dirty_sections
+            .insert_mask(2, -3, SectionMask::single(7));
+        assert_eq!(
+            world
+                .dirty_sections
+                .take_column(2, -3)
+                .iter()
+                .collect::<Vec<_>>(),
+            [5, 7]
+        );
+    }
 
     #[test]
     fn a_resent_column_keeps_its_sections_but_takes_new_biomes() {
