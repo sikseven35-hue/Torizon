@@ -2,7 +2,7 @@
 use std::fs;
 use std::path::Path;
 
-pub const VERSION: &str = "torizon-0.1.1";
+pub const VERSION: &str = "torizon-0.1.2";
 
 /// Release EXEs carry a ZIP overlay containing only our runtime. ZIP offsets are
 /// relative to the appended archive, so ZipArchive also accepts the PE prefix.
@@ -67,9 +67,9 @@ pub fn initialize() -> Result<(), String> {
             unpack_runtime(&executable, &installed)?
         };
         if ready {
-            fs::write(installed.join(".installed"), b"Torizon 0.1.1\n")
+            fs::write(installed.join(".installed"), b"Torizon 0.1.2\n")
                 .map_err(|e| e.to_string())?;
-            fs::write(&marker, b"Torizon 0.1.1\n").map_err(|e| e.to_string())?;
+            fs::write(&marker, b"Torizon 0.1.2\n").map_err(|e| e.to_string())?;
         }
     }
     if installed.join("horizon-client.exe").is_file() {

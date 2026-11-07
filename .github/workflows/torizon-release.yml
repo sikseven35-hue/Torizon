@@ -4,7 +4,7 @@ on:
     inputs:
       tag:
         description: Release tag
-        default: v0.1.1
+        default: v0.1.2
         required: true
       reuse_game_from_run:
         description: Optional successful game build run with identical engine sources
@@ -27,8 +27,8 @@ env:
   CARGO_PROFILE_RELEASE_DEBUG: '0'
   CARGO_INCREMENTAL: '0'
   RUSTFLAGS: '-C target-feature=+crt-static'
-  HORIZON_VERSION: 'Torizon 0.1.1'
-  HORIZON_LAUNCHER_VERSION: '0.1.1'
+  HORIZON_VERSION: 'Torizon 0.1.2'
+  HORIZON_LAUNCHER_VERSION: '0.1.2'
 
 jobs:
   build:
@@ -66,6 +66,18 @@ jobs:
           python tools/bench_page_runs.py --test-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo build --locked --release -p horizon-client -p horizon-client-lib --bin horizon-client --bin horizon-ctl -p horizon-prepare --bin horizon-prepare -p horizon-server --bin horizon-server
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $scratch = Join-Path $env:RUNNER_TEMP ('torizon-tests-' + [guid]::NewGuid())
+          foreach ($key in @('HORIZON_HOME','HORIZON_LAUNCHER_HOME','XDG_DATA_HOME','XDG_CONFIG_HOME','HORIZON_LAUNCHER_TRASH','HORIZON_LAUNCHER_CLIPBOARD','HORIZON_LAUNCHER_DESKTOP')) {
+            [Environment]::SetEnvironmentVariable($key, (Join-Path $scratch $key), 'Process')
+          }
+          $env:HORIZON_NO_AUDIO = '1'
+          $env:HORIZON_LAUNCHER_NO_SELF_UPDATE = '1'
+          cargo test --locked --release -p horizon-threads --lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release -p horizon-client-render --lib streaming::tests::remote_dirty_masks
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release -p horizon-client --lib game::remote_chunks::tests::
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/package_torizon.py --game-bin target/release --output dist/Torizon
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -121,7 +133,7 @@ jobs:
           RELEASE_DRAFT: ${{ inputs.draft }}
         run: |
           if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Use a version tag such as v0.1.0' }
-          Set-Content dist/Torizon/runtime/.installed 'Torizon 0.1.1' -Encoding ascii
+          Set-Content dist/Torizon/runtime/.installed 'Torizon 0.1.2' -Encoding ascii
           Copy-Item TORIZON.md dist/Torizon/TORIZON.md -Force
           Compress-Archive -Path dist/Torizon -DestinationPath dist/Torizon-Windows-x64.zip
           python tools/package_torizon_exe.py --launcher dist/Torizon/Torizon.exe --runtime dist/Torizon/runtime --output dist/Torizon.exe
