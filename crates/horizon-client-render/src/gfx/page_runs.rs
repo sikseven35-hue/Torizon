@@ -32,7 +32,9 @@ pub(super) struct Run {
 #[derive(Default)]
 pub(super) struct PageRuns {
     runs: Vec<Run>,
-    scratch: Vec<([u32; 5], (u32, Option<u32>))>,
+    sort_scratch: Vec<Run>,
+    draw_scratch: Vec<[u32; 5]>,
+    page_scratch: Vec<(u32, Option<u32>)>,
 }
 
 impl PageRuns {
@@ -82,19 +84,44 @@ impl PageRuns {
         if self.runs.windows(2).all(|w| page(&w[0]) == page(&w[1])) {
             return &self.runs;
         }
-        // Stable: within a band and page the runs stay nearest first.
-        self.runs.sort_by_key(|r| r.key);
-        self.scratch.clear();
+        // Stable: within a band and page the runs stay nearest first. Only
+        // varying bytes need a pass: typical terrain has a few pages and
+        // distance bands (two bytes), rather than eight. Reuse storage instead
+        // of allocating the comparison sort's temporary buffer every frame.
+        self.sort_scratch.resize(self.runs.len(), self.runs[0]);
+        let first = self.runs[0].key;
+        let varying = self.runs.iter().fold(0, |bits, r| bits | (r.key ^ first));
+        for shift in (0..64).step_by(8) {
+            if (varying >> shift) & 255 == 0 {
+                continue;
+            }
+            let mut offsets = [0usize; 256];
+            for r in &self.runs {
+                offsets[((r.key >> shift) & 255) as usize] += 1;
+            }
+            let mut total = 0;
+            for offset in &mut offsets {
+                let count = *offset;
+                *offset = total;
+                total += count;
+            }
+            for r in &self.runs {
+                let offset = &mut offsets[((r.key >> shift) & 255) as usize];
+                self.sort_scratch[*offset] = *r;
+                *offset += 1;
+            }
+            std::mem::swap(&mut self.runs, &mut self.sort_scratch);
+        }
+        self.draw_scratch.clear();
+        self.page_scratch.clear();
         for r in &mut self.runs {
             let (s, e) = (r.start as usize, (r.start + r.len) as usize);
-            r.start = (base + self.scratch.len()) as u32;
-            self.scratch
-                .extend(draws[s..e].iter().copied().zip(pages[s..e].iter().copied()));
+            r.start = (base + self.draw_scratch.len()) as u32;
+            self.draw_scratch.extend_from_slice(&draws[s..e]);
+            self.page_scratch.extend_from_slice(&pages[s..e]);
         }
-        for (i, &(draw, p)) in self.scratch.iter().enumerate() {
-            draws[base + i] = draw;
-            pages[base + i] = p;
-        }
+        draws[base..base + self.draw_scratch.len()].copy_from_slice(&self.draw_scratch);
+        pages[base..base + self.page_scratch.len()].copy_from_slice(&self.page_scratch);
         &self.runs
     }
 }
@@ -212,5 +239,46 @@ mod tests {
         grouped.clear();
         grouped.push(bits(1.0), 0, 0, 0, [0; 3]);
         assert!(grouped.regroup(&mut [], &mut [], 0).is_empty());
+    }
+
+    #[test]
+    fn regroup_matches_stable_reference_across_all_key_bytes() {
+        let mut grouped = PageRuns::default();
+        // Reuse the same scratch buffers with smaller and larger lists. Equal
+        // keys must preserve input order, including their occlusion test tags.
+        for count in [1000, 17, 2048] {
+            grouped.clear();
+            let mut draws = vec![[99; 5]];
+            let mut pages = vec![(99, None)];
+            let mut expected = Vec::new();
+            for n in 0..count {
+                let group = (n % 3) as u8;
+                let band = [0u64, 1, 256, 65536][(n / 3) % 4];
+                let page = [0, 1, 257, 65537, u32::MAX][(n / 12) % 5];
+                let draw = [n as u32, 1, 2, 3, 4];
+                let tag = [n as u32, 10, 20];
+                grouped.push_in(
+                    group,
+                    bits(band as f64 * 64. + 16.),
+                    page,
+                    draws.len(),
+                    1,
+                    tag,
+                );
+                draws.push(draw);
+                pages.push((page, Some(n as u32)));
+                expected.push(((group, band, page), draw, tag, (page, Some(n as u32))));
+            }
+            expected.sort_by_key(|e| e.0);
+            let runs = grouped.regroup(&mut draws, &mut pages, 1);
+            assert_eq!(draws[0], [99; 5]);
+            assert_eq!(pages[0], (99, None));
+            for (i, (_, draw, tag, page)) in expected.into_iter().enumerate() {
+                assert_eq!(draws[i + 1], draw);
+                assert_eq!(pages[i + 1], page);
+                assert_eq!(runs[i].tag, tag);
+                assert_eq!((runs[i].start, runs[i].len), (i as u32 + 1, 1));
+            }
+        }
     }
 }
