@@ -9,7 +9,8 @@ implemented in this fork; importing older worlds upgrades them to 26.3.
 
 On Windows, extract the complete release ZIP into a writable folder and run
 **Torizon.exe**. Keep `runtime/` beside it. User data stays in `data/` and `game/`.
-The separate EXE download is a launcher replacement; a first installation needs the ZIP.
+The separate EXE also contains the complete Rust runtime and installs it on first launch;
+it does not require the ZIP or an Internet connection to install the engine.
 The first launch opens a separate welcome screen, then walks through language,
 offline name, Minecraft files, performance and optional transparent animated cats. The setup can be reopened in Settings. The cats
 become still images while a game runs.

@@ -12,7 +12,7 @@ root = Path(__file__).resolve().parent.parent
 out = args.output
 runtime = out / 'runtime'
 runtime.mkdir(parents=True, exist_ok=True)
-(runtime / '.installed').write_text('Torizon 0.1.0\n', encoding='utf-8')
+(runtime / '.installed').write_text('Torizon 0.1.1\n', encoding='utf-8')
 for name in ['horizon-client.exe', 'horizon-ctl.exe', 'horizon-prepare.exe', 'horizon-server.exe']:
     shutil.copy2(args.game_bin / name, runtime / name)
 for name in ['research-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md']:

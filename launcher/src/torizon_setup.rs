@@ -249,7 +249,11 @@ impl Launcher {
                                         ),
                                     ),
                             )
-                            .child(self.torizon_mascot(330., false)),
+                            .child(self.torizon_mascot(330., false))
+                            .relative()
+                            .with_animation("welcome-enter", motion::eased(motion::POP), |d, p| {
+                                d.opacity(p).top(px(motion::POP_RISE * (1. - p)))
+                            }),
                     ),
             );
         }
@@ -401,7 +405,11 @@ impl Launcher {
                 .items_center()
                 .justify_center()
                 .occlude()
-                .child(card),
+                .child(card.relative().with_animation(
+                    ElementId::named_usize("setup-enter", step),
+                    motion::eased(motion::POP),
+                    |d, p| d.opacity(p).top(px(motion::POP_RISE * (1. - p))),
+                )),
         )
     }
 

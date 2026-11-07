@@ -5289,8 +5289,8 @@ impl Render for Launcher {
         self.window_long_side = f32::from(size.width).max(f32::from(size.height));
         self.scale_factor = window.scale_factor();
         if !self.settings.torizon_setup_done {
-            self.opening = None;
-            if window.focused(cx).is_none() {
+            let (reveal, held) = self.opening_phase(window);
+            if self.opening.is_none() && window.focused(cx).is_none() {
                 window.focus(&self.root_focus, cx);
             }
             glass::begin_build(window);
@@ -5305,7 +5305,15 @@ impl Render for Launcher {
                 .bg(t.page)
                 .child(self.scene.clone())
                 .children(titlebar::render(&t, window))
-                .child(div().relative().flex_1().min_h_0().children(setup));
+                .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .opacity(ease_out_cubic((reveal - 0.3) / 0.7))
+                        .children(setup),
+                )
+                .children(self.opening_overlay(reveal, held, cx));
         }
         let content = match self.page {
             Page::Play => self.play_page(cx),
@@ -5524,7 +5532,31 @@ impl Render for Launcher {
         if self.asking_owner() {
             root = root.child(self.owner_screen(cx));
         }
-        if let Some(opening) = &self.opening {
+        root = root.children(self.opening_overlay(reveal, held, cx));
+
+        div()
+            .flex()
+            .flex_col()
+            .relative()
+            .size_full()
+            .bg(t.side)
+            .child(sky)
+            .children(titlebar::render(&t, window))
+            .children(self.settings_save_notice(cx))
+            .child(root.flex_1().min_h_0())
+            .children(titlebar::resize_handles(window))
+    }
+}
+
+impl Launcher {
+    fn opening_overlay(
+        &self,
+        reveal: f32,
+        held: f32,
+        cx: &mut Context<Self>,
+    ) -> Option<Stateful<Div>> {
+        let t = self.theme;
+        self.opening.as_ref().map(|opening| {
             // The wordmark arrives letter by letter, then gives way to the launcher; a click or
             // a key skips ahead.
             let gone = 1. - ease_out_cubic(reveal / 0.6);
@@ -5544,55 +5576,40 @@ impl Render for Launcher {
                         .top(px(theme::RISE * 2. * (1. - p)))
                         .child(c.to_string())
                 }));
-            root = root.child(
-                div()
-                    .id("opening")
-                    .track_focus(&opening.focus)
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(t.page.opacity(gone))
-                    .when(reveal == 0., |d| d.cursor_pointer())
-                    .child(
-                        div()
-                            .relative()
-                            .top(px(-24. * (1. - gone)))
-                            .opacity(gone)
-                            .child(word),
-                    )
-                    .when(reveal == 0., |d| {
-                        d.on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+            div()
+                .id("opening")
+                .track_focus(&opening.focus)
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(t.page.opacity(gone))
+                .when(reveal == 0., |d| d.cursor_pointer())
+                .child(
+                    div()
+                        .relative()
+                        .top(px(-24. * (1. - gone)))
+                        .opacity(gone)
+                        .child(word),
+                )
+                .when(reveal == 0., |d| {
+                    d.on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                        this.skip_opening();
+                        cx.notify();
+                    }))
+                    .on_key_down(cx.listener(
+                        |this, _: &KeyDownEvent, _, cx| {
                             this.skip_opening();
                             cx.notify();
-                        }))
-                        .on_key_down(cx.listener(
-                            |this, _: &KeyDownEvent, _, cx| {
-                                this.skip_opening();
-                                cx.notify();
-                            },
-                        ))
-                    }),
-            );
-        }
-        div()
-            .flex()
-            .flex_col()
-            .relative()
-            .size_full()
-            .bg(t.side)
-            .child(sky)
-            .children(titlebar::render(&t, window))
-            .children(self.settings_save_notice(cx))
-            .child(root.flex_1().min_h_0())
-            .children(titlebar::resize_handles(window))
+                        },
+                    ))
+                })
+        })
     }
-}
 
-impl Launcher {
     /// Where the opening is: the reveal's progress (1 when there is no opening) and how long
     /// the wordmark has been showing, in seconds.
     fn opening_phase(&mut self, window: &mut Window) -> (f32, f32) {

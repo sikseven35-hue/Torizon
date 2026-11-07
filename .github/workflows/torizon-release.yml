@@ -4,12 +4,16 @@ on:
     inputs:
       tag:
         description: Release tag
-        default: v0.1.0
+        default: v0.1.1
         required: true
       reuse_game_from_run:
         description: Optional successful game build run with identical engine sources
         default: ''
         required: false
+      draft:
+        description: Keep a new release as a draft for artifact verification
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 
@@ -23,8 +27,8 @@ env:
   CARGO_PROFILE_RELEASE_DEBUG: '0'
   CARGO_INCREMENTAL: '0'
   RUSTFLAGS: '-C target-feature=+crt-static'
-  HORIZON_VERSION: 'Torizon 0.1.0'
-  HORIZON_LAUNCHER_VERSION: '0.1.0'
+  HORIZON_VERSION: 'Torizon 0.1.1'
+  HORIZON_LAUNCHER_VERSION: '0.1.1'
 
 jobs:
   build:
@@ -51,12 +55,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --release --manifest-path launcher/Cargo.toml --lib account::tests::the_developer_option
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --manifest-path launcher/Cargo.toml --lib torizon::tests::
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Path dist/Torizon -Force | Out-Null
           Copy-Item launcher/target/release/horizon-launcher.exe dist/Torizon/Torizon.exe
       - name: Build Rust game and prepare tools
         if: matrix.component == 'game'
         shell: pwsh
         run: |
+          python tools/bench_page_runs.py --test-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo build --locked --release -p horizon-client -p horizon-client-lib --bin horizon-client --bin horizon-ctl -p horizon-prepare --bin horizon-prepare -p horizon-server --bin horizon-server
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/package_torizon.py --game-bin target/release --output dist/Torizon
@@ -110,17 +118,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_DRAFT: ${{ inputs.draft }}
         run: |
           if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Use a version tag such as v0.1.0' }
-          Set-Content dist/Torizon/runtime/.installed 'Torizon 0.1.0' -Encoding ascii
+          Set-Content dist/Torizon/runtime/.installed 'Torizon 0.1.1' -Encoding ascii
           Copy-Item TORIZON.md dist/Torizon/TORIZON.md -Force
           Compress-Archive -Path dist/Torizon -DestinationPath dist/Torizon-Windows-x64.zip
-          Copy-Item dist/Torizon/Torizon.exe dist/Torizon.exe
+          python tools/package_torizon_exe.py --launcher dist/Torizon/Torizon.exe --runtime dist/Torizon/runtime --output dist/Torizon.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $files = @('dist/Torizon-Windows-x64.zip', 'dist/Torizon.exe')
           $files | ForEach-Object { $h = Get-FileHash $_ -Algorithm SHA256; '{0}  {1}' -f $h.Hash.ToLower(),(Split-Path $_ -Leaf) } | Set-Content dist/SHA256SUMS -Encoding ascii
           gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Torizon $env:RELEASE_TAG — Windows x64" --notes-file TORIZON.md
+            $draft = @()
+            if ($env:RELEASE_DRAFT -eq 'true') { $draft = @('--draft') }
+            gh release create $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Torizon $env:RELEASE_TAG — Windows x64" --notes-file TORIZON.md @draft
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           gh release upload $env:RELEASE_TAG dist/Torizon-Windows-x64.zip dist/Torizon.exe dist/SHA256SUMS --repo $env:GITHUB_REPOSITORY --clobber
